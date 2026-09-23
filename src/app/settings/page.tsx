@@ -4,6 +4,7 @@ import { useToast } from "@/components/Toast";
 import { SectionHeader, Spinner } from "@/components/ui";
 import { DEFAULT_SETTINGS, weightPercent } from "@/lib/defaults";
 import { useSettings } from "@/lib/hooks";
+import { saveLocalSettings } from "@/lib/local-store";
 import type { AppSettings } from "@/lib/types";
 import { RotateCcw, Save } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -120,7 +121,14 @@ export default function SettingsPage() {
         body: JSON.stringify(settings),
       });
       if (!res.ok) throw new Error();
-      toast.push("Settings saved.", "success");
+      const data = await res.json().catch(() => null);
+      if (data?.persistent === false) {
+        // No database — remember the configuration in this browser.
+        saveLocalSettings(settings);
+        toast.push("Settings saved in this browser.", "success");
+      } else {
+        toast.push("Settings saved.", "success");
+      }
     } catch {
       toast.push("Could not save settings.", "error");
     } finally {

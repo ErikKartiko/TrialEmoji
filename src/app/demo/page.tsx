@@ -7,6 +7,7 @@ import { CategoryBadge, SectionHeader, Spinner } from "@/components/ui";
 import { runFullAnalysis } from "@/lib/analysis";
 import { getDemoExamples, type DemoExample } from "@/lib/demo";
 import { useAiConfigured, useSettings } from "@/lib/hooks";
+import { saveLocalEvaluation } from "@/lib/local-store";
 import type { AnalysisBundle } from "@/lib/types";
 import { ArrowLeft, Bot, FlaskConical, Play } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -75,6 +76,19 @@ export default function DemoPage() {
       if (!res.ok || !data?.evaluation?.id) throw new Error();
       const parsedScore =
         assessment.score.trim() === "" ? null : Math.round(Number(assessment.score));
+      if (data.persistent === false) {
+        const record = {
+          ...(data.evaluation as NonNullable<typeof data.evaluation>),
+          lecturerScore:
+            parsedScore !== null && !Number.isNaN(parsedScore) ? parsedScore : null,
+          lecturerNotes: assessment.notes,
+        };
+        saveLocalEvaluation(record);
+        toast.push("Demo evaluation saved in this browser.", "success");
+        router.push(`/evaluation/${data.evaluation.id}`);
+        router.refresh();
+        return;
+      }
       if (
         (parsedScore !== null && !Number.isNaN(parsedScore)) ||
         assessment.notes.trim() !== ""

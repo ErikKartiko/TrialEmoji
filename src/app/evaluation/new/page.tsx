@@ -12,6 +12,7 @@ import {
 } from "@/lib/analysis";
 import { useAiConfigured, useSettings } from "@/lib/hooks";
 import { readImageFile } from "@/lib/image-processing";
+import { saveLocalEvaluation } from "@/lib/local-store";
 import type { AnalysisBundle, StudentInfo } from "@/lib/types";
 import { ArrowLeft, Bot, ScanSearch, ShieldCheck } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -171,6 +172,25 @@ export default function NewEvaluationPage() {
       const id = data.evaluation.id as string;
       const parsedScore =
         assessment.score.trim() === "" ? null : Math.round(Number(assessment.score));
+      if (data.persistent === false) {
+        // No database on the server — keep the record in this browser.
+        const record = {
+          ...(data.evaluation as NonNullable<typeof data.evaluation>),
+          lecturerScore:
+            parsedScore !== null && !Number.isNaN(parsedScore) ? parsedScore : null,
+          lecturerNotes: assessment.notes,
+        };
+        const saved = saveLocalEvaluation(record);
+        toast.push(
+          saved.ok
+            ? "Evaluation saved in this browser (no database configured)."
+            : (saved.error ?? "Could not store the evaluation locally."),
+          saved.ok ? "success" : "error",
+        );
+        router.push(`/evaluation/${id}`);
+        router.refresh();
+        return;
+      }
       if (
         (parsedScore !== null && !Number.isNaN(parsedScore)) ||
         assessment.notes.trim() !== ""

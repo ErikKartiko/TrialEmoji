@@ -1,8 +1,10 @@
-import { db } from "@/db";
-import { evaluations } from "@/db/schema";
-import { serializeEvaluation } from "@/lib/serialize";
+import {
+  deleteEvaluation,
+  getEvaluation,
+  storageIsPersistent,
+  updateLecturerAssessment,
+} from "@/lib/server/repository";
 import { sanitizeLecturerAssessment } from "@/lib/validation";
-import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
@@ -13,18 +15,17 @@ type RouteContext = { params: Promise<{ id: string }> };
 export async function GET(_request: Request, context: RouteContext) {
   try {
     const { id } = await context.params;
-    const [row] = await db
-      .select()
-      .from(evaluations)
-      .where(eq(evaluations.id, id))
-      .limit(1);
-    if (!row) {
+    const record = await getEvaluation(id);
+    if (!record) {
       return NextResponse.json(
-        { error: "Evaluation not found." },
+        { error: "Evaluation not found.", persistent: storageIsPersistent() },
         { status: 404 },
       );
     }
-    return NextResponse.json({ evaluation: serializeEvaluation(row) });
+    return NextResponse.json({
+      evaluation: record,
+      persistent: storageIsPersistent(),
+    });
   } catch {
     return NextResponse.json(
       { error: "Could not load the evaluation." },
@@ -38,19 +39,18 @@ export async function PATCH(request: Request, context: RouteContext) {
   try {
     const { id } = await context.params;
     const body = await request.json();
-    const { lecturerScore, lecturerNotes } = sanitizeLecturerAssessment(body);
-    const [row] = await db
-      .update(evaluations)
-      .set({ lecturerScore, lecturerNotes })
-      .where(eq(evaluations.id, id))
-      .returning();
-    if (!row) {
+    const patch = sanitizeLecturerAssessment(body);
+    const record = await updateLecturerAssessment(id, patch);
+    if (!record) {
       return NextResponse.json(
-        { error: "Evaluation not found." },
+        { error: "Evaluation not found.", persistent: storageIsPersistent() },
         { status: 404 },
       );
     }
-    return NextResponse.json({ evaluation: serializeEvaluation(row) });
+    return NextResponse.json({
+      evaluation: record,
+      persistent: storageIsPersistent(),
+    });
   } catch {
     return NextResponse.json(
       { error: "Could not save the lecturer assessment." },
@@ -63,11 +63,8 @@ export async function PATCH(request: Request, context: RouteContext) {
 export async function DELETE(_request: Request, context: RouteContext) {
   try {
     const { id } = await context.params;
-    const deleted = await db
-      .delete(evaluations)
-      .where(eq(evaluations.id, id))
-      .returning({ id: evaluations.id });
-    if (deleted.length === 0) {
+    const ok = await deleteEvaluation(id);
+    if (!ok) {
       return NextResponse.json(
         { error: "Evaluation not found." },
         { status: 404 },

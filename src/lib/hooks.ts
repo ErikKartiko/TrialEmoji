@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { DEFAULT_SETTINGS, mergeSettings } from "./defaults";
+import { getLocalSettings } from "./local-store";
 import type { AppSettings } from "./types";
 
 /** Loads lecturer-configurable settings (falls back to defaults). */
@@ -14,11 +15,17 @@ export function useSettings() {
     fetch("/api/settings")
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
-        if (!cancelled && data?.settings) {
+        if (cancelled) return;
+        if (data?.persistent === false) {
+          // No database — browser-stored settings take precedence.
+          setSettings(getLocalSettings() ?? mergeSettings(data?.settings));
+        } else if (data?.settings) {
           setSettings(mergeSettings(data.settings));
         }
       })
-      .catch(() => {})
+      .catch(() => {
+        if (!cancelled) setSettings(getLocalSettings() ?? DEFAULT_SETTINGS);
+      })
       .finally(() => {
         if (!cancelled) setLoading(false);
       });

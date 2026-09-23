@@ -8,6 +8,7 @@ import { formatScore } from "@/lib/defaults";
 import { downloadTextFile, toCsv } from "@/lib/export";
 import { useAiConfigured, useSettings } from "@/lib/hooks";
 import { readImageFile, validateImageFile } from "@/lib/image-processing";
+import { saveLocalEvaluation } from "@/lib/local-store";
 import type { AnalysisBundle } from "@/lib/types";
 import {
   ArrowDownToLine,
@@ -255,6 +256,7 @@ export default function BatchPage() {
     setSavingAll(true);
     let saved = 0;
     let failed = 0;
+    let savedLocally = false;
     for (const target of targets) {
       try {
         const score =
@@ -276,6 +278,12 @@ export default function BatchPage() {
           }),
         });
         if (!res.ok) throw new Error();
+        const data = await res.json().catch(() => null);
+        if (data?.persistent === false && data?.evaluation) {
+          // No database — keep the record in this browser.
+          saveLocalEvaluation(data.evaluation);
+          savedLocally = true;
+        }
         updatePair(target.id, { saved: true });
         saved++;
       } catch {
@@ -285,6 +293,11 @@ export default function BatchPage() {
     setSavingAll(false);
     if (failed > 0) {
       toast.push(`Saved ${saved} evaluations — ${failed} failed.`, "error");
+    } else if (savedLocally) {
+      toast.push(
+        `Saved ${saved} evaluations in this browser (no database configured).`,
+        "success",
+      );
     } else {
       toast.push(`Saved ${saved} evaluations to the database.`, "success");
     }

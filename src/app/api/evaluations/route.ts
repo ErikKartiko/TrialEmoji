@@ -1,25 +1,28 @@
-import { db } from "@/db";
-import { evaluations } from "@/db/schema";
-import { serializeEvaluation } from "@/lib/serialize";
+import {
+  createEvaluation,
+  listEvaluations,
+  storageIsPersistent,
+} from "@/lib/server/repository";
 import { sanitizeEvaluationPayload } from "@/lib/validation";
-import { desc } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 
-/** GET /api/evaluations — list all evaluations (newest first). */
+/**
+ * GET /api/evaluations
+ * Works with or without a database. `persistent` tells the client whether
+ * results are stored server-side (DATABASE_URL configured) or not.
+ */
 export async function GET() {
   try {
-    const rows = await db
-      .select()
-      .from(evaluations)
-      .orderBy(desc(evaluations.createdAt));
+    const records = await listEvaluations();
     return NextResponse.json({
-      evaluations: rows.map(serializeEvaluation),
+      evaluations: records,
+      persistent: storageIsPersistent(),
     });
   } catch {
     return NextResponse.json(
-      { error: "Could not load evaluations." },
+      { error: "Could not load evaluations.", persistent: storageIsPersistent() },
       { status: 500 },
     );
   }
@@ -30,9 +33,9 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const payload = sanitizeEvaluationPayload(body);
-    const [row] = await db.insert(evaluations).values(payload).returning();
+    const record = await createEvaluation(payload);
     return NextResponse.json(
-      { evaluation: serializeEvaluation(row) },
+      { evaluation: record, persistent: storageIsPersistent() },
       { status: 201 },
     );
   } catch (error) {

@@ -15,6 +15,8 @@ interface LecturerAssessmentProps {
   onChange: (value: LecturerAssessmentValue) => void;
   /** When provided, the form saves directly via PATCH. */
   evaluationId?: string | null;
+  /** Custom persistence handler (e.g. browser localStorage). Overrides PATCH. */
+  onSaveCustom?: (value: LecturerAssessmentValue) => Promise<boolean>;
   disabled?: boolean;
 }
 
@@ -22,6 +24,7 @@ export function LecturerAssessment({
   value,
   onChange,
   evaluationId,
+  onSaveCustom,
   disabled,
 }: LecturerAssessmentProps) {
   const toast = useToast();
@@ -31,11 +34,25 @@ export function LecturerAssessment({
   const scoreInvalid =
     numericScore !== null &&
     (Number.isNaN(numericScore) || numericScore < 0 || numericScore > 100);
+  const canSave = Boolean(evaluationId) || Boolean(onSaveCustom);
 
   const save = async () => {
-    if (!evaluationId || scoreInvalid) return;
+    if (scoreInvalid || !canSave) return;
     setSaving(true);
+    if (onSaveCustom) {
+      try {
+        const ok = await onSaveCustom(value);
+        if (!ok) throw new Error();
+        toast.push("Lecturer assessment saved.", "success");
+      } catch {
+        toast.push("Could not save the lecturer assessment.", "error");
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
     try {
+      if (!evaluationId) throw new Error();
       const res = await fetch(`/api/evaluations/${evaluationId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -108,7 +125,7 @@ export function LecturerAssessment({
           placeholder="Observations about structure, geometry usage, effort, deviations…"
           className="w-full resize-y rounded-xl border border-[var(--line-strong)] bg-white px-3.5 py-2.5 text-sm text-[var(--ink)] outline-none transition focus:ring-2 focus:ring-[var(--accent)]/25"
         />
-        {evaluationId && (
+        {canSave && (
           <div className="mt-2 flex justify-end">
             <button
               type="button"

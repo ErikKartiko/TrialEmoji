@@ -6,6 +6,7 @@ import {
   weightPercent,
 } from "@/lib/defaults";
 import { downloadTextFile, toCsv } from "@/lib/export";
+import { removeLocalEvaluation, updateLocalEvaluation } from "@/lib/local-store";
 import type { AnalysisBundle, StudentInfo } from "@/lib/types";
 import {
   CalendarDays,
@@ -31,6 +32,8 @@ interface EvaluationResultProps {
   student: StudentInfo;
   analysis: AnalysisBundle;
   variant: "preview" | "persisted";
+  /** Where "persisted" records live: server DB/API or browser localStorage. */
+  persistence?: "server" | "local";
   evaluationId?: string;
   initialLecturer?: LecturerAssessmentValue;
   createdAt?: string;
@@ -52,6 +55,7 @@ export function EvaluationResult({
   student,
   analysis,
   variant,
+  persistence = "server",
   evaluationId,
   initialLecturer,
   createdAt,
@@ -109,6 +113,13 @@ export function EvaluationResult({
   const doDelete = async () => {
     if (!evaluationId) return;
     setDeleting(true);
+    if (persistence === "local") {
+      removeLocalEvaluation(evaluationId);
+      toast.push("Evaluation deleted from this browser.", "success");
+      router.push("/");
+      router.refresh();
+      return;
+    }
     try {
       const res = await fetch(`/api/evaluations/${evaluationId}`, {
         method: "DELETE",
@@ -122,6 +133,21 @@ export function EvaluationResult({
       setDeleting(false);
       setConfirmDelete(false);
     }
+  };
+
+  /** Persist lecturer assessment in browser mode. */
+  const saveLecturerLocally = async (value: LecturerAssessmentValue) => {
+    if (!evaluationId) return false;
+    const parsed =
+      value.score.trim() === "" ? null : Math.round(Number(value.score));
+    if (parsed !== null && (Number.isNaN(parsed) || parsed < 0 || parsed > 100)) {
+      return false;
+    }
+    const updated = updateLocalEvaluation(evaluationId, {
+      lecturerScore: parsed,
+      lecturerNotes: value.notes,
+    });
+    return updated !== null;
   };
 
   return (
@@ -275,7 +301,14 @@ export function EvaluationResult({
         <LecturerAssessment
           value={lecturer}
           onChange={setLecturer}
-          evaluationId={variant === "persisted" ? evaluationId : null}
+          evaluationId={
+            variant === "persisted" && persistence === "server" ? evaluationId : null
+          }
+          onSaveCustom={
+            variant === "persisted" && persistence === "local"
+              ? saveLecturerLocally
+              : undefined
+          }
         />
       </section>
 
